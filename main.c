@@ -2,20 +2,25 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
- 
-typedef struct	s_philo
+
+typedef struct	s_philo_op
 {
 	int				num;
 	int				time_to_die;
 	int				time_to_eat;
 	int				time_to_sleep;
 	int				eat_num;
-	pthread_t		thread;
 	pthread_mutex_t *fork;
+}				t_philo_op;
+
+typedef struct	s_philo
+{
+	pthread_t		thread;
+	int				p_num;
+	int				fork_num;
+	t_philo_op		*op;
 }				t_philo;
 
-// 뮤텍스 객체 선언
-pthread_mutex_t fork1;
 
 int				ft_atoi(const char *str)
 {
@@ -46,36 +51,74 @@ int				ft_atoi(const char *str)
 	return ((int)(total * minus));
 }
 
-void *t_function(void *data)
+void *t_function(t_philo *philo)
 {
-    int i;
-    char* thread_name = (char*)data;
+	int fork_index;
 
-    pthread_mutex_lock(&fork1);
-    
-	pthread_mutex_unlock(&fork1);
-
-	printf("%s end\n", thread_name);
+	if (philo->p_num % 2 == 0)
+	{
+		fork_index = philo->p_num % philo->op->num;
+		pthread_mutex_lock(&(philo->op->fork[fork_index]));
+		printf("%d philosophers pick fork\n", philo->p_num);
+		philo->fork_num++;
+	}
+	else
+	{
+		fork_index = (philo->p_num + 1) % philo->op->num;
+		pthread_mutex_lock(&(philo->op->fork[fork_index]));
+		printf("%d philosophers pick fork\n", philo->p_num);
+		philo->fork_num++;
+	}
+	if (philo->p_num % 2 == 0)
+	{
+		fork_index = (philo->p_num + 1) % philo->op->num;
+		pthread_mutex_lock(&(philo->op->fork[fork_index]));
+		printf("%d philosophers pick fork\n", philo->p_num);
+		philo->fork_num++;
+	}
+	else
+	{
+		fork_index = philo->p_num % philo->op->num;
+		pthread_mutex_lock(&(philo->op->fork[fork_index]));
+		printf("%d philosophers pick fork\n", philo->p_num);
+		philo->fork_num++;
+	}
+	if (philo->fork_num == 2)
+	{
+		printf("%d philosophers eating...\n", philo->p_num);
+		usleep(1000000);
+		pthread_mutex_unlock(&(philo->op->fork[philo->p_num]));
+		pthread_mutex_unlock(&(philo->op->fork[(philo->p_num + 1) % philo->op->num]));
+		printf("%d philosophers sleeping...\n", philo->p_num);
+		usleep(1000000);
+		printf("%d philosophers thinking...\n", philo->p_num);
+		usleep(1000000);
+	}
+    //pthread_mutex_lock(&(philo->fork[philo->op.p_num]));
+	//pthread_mutex_unlock(&(philo->fork[philo->op.p_num]));
+	return (NULL);
 }
 
-init_philo(t_philo *p, int argc, char **argv)
+void			init_philo(t_philo_op *p, int argc, char **argv)
 {
-	p->num = argv[1];
-	p->time_to_die = argv[2];
-	p->time_to_eat = argv[3];
-	p->time_to_sleep = argv[4];
+	p->num = ft_atoi(argv[1]);
+	p->time_to_die = ft_atoi(argv[2]);
+	p->time_to_eat = ft_atoi(argv[3]);
+	p->time_to_sleep = ft_atoi(argv[4]);
 	if (argc == 6)
-		p->eat_num = argv[5];
+		p->eat_num = ft_atoi(argv[5]);
 	else
 		p->eat_num = -1;
-	p->fork = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t) * 5);
+	
+	p->fork = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t) * p->num);
 }
 
-int main(int argc, char **argv)
+int				main(int argc, char **argv)
 {
-	pthread_t	*philo;
-	t_philo		p;
+	t_philo_op	philo_op;
+	t_philo		*philo;
 	int			i;
+    int			status;
 
 	i = 0;
 	if (argc < 5)
@@ -83,18 +126,25 @@ int main(int argc, char **argv)
 		printf("need more argument\n");
 		exit(1);
 	}
-	init_philo(&p, argv, argc);
+	//구조체 init
+	init_philo(&philo_op, argc, argv);
 	//mutex_init
-	while (i < p.num)
-		pthread_mutex_init(&(p.fork[i++]), NULL);
-	philo = (pthread_t *)malloc(sizeof(pthread_t) * 5);
+	while (i < philo_op.num)
+		pthread_mutex_init(&(philo_op.fork[i++]), NULL);
+	philo = (t_philo *)malloc(sizeof(t_philo) * philo_op.num);
 	i = 0;
 	//thread 생성
-	while (i < p.num)
-		pthread_create(&philo[i++], NULL, t_function, (void *)"philosopher");
-    int status;
-
- 
-	for (int i = 0; i < 5; i++)
-    	pthread_join(philo[i], (void *)&status);
+	while (i < philo_op.num)
+	{
+		philo[i].p_num = i;//스레드 구분자를 어떻게 설정해줄까
+		philo[i].fork_num = 0; //포크 쥔 개수 초기화
+		philo[i].op = &philo_op;
+		pthread_create(&(philo[i].thread), NULL, (void *)t_function, &(philo[i]));
+		i++;
+	}
+	i = 0;
+	//thread 대기
+	while (i < philo_op.num)
+    	pthread_join(philo[i++].thread, (void *)&status);
+	return (0);
 }
